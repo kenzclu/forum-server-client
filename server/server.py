@@ -20,6 +20,13 @@ def socketToIndex(socket: s.socket):
             return i
     return -1
 
+def sendMessageToClient(client: int, clientMessage: str, displayMessage: str):
+    global clients
+    if clientMessage != None:
+        clients[client][1] = clientMessage
+    if displayMessage != None:
+        clients[client][2] = displayMessage
+
 
 def checkUsernameExists(username: str):
     credentials = open("credentials.txt", "r")
@@ -44,11 +51,20 @@ def addLogin(username, password):
     credentials.write(f"\n{username} {password}")
     credentials.close()
 
+def createFile(name, username):
+    try:
+        f = open(name, "x")
+        f.write(f"{username}\n")
+        return True
+    except:
+        return False
+
 
 def socket_handler(clientSocket: s.socket):
     while True:
         message = clientSocket.recv(2048).decode()
         [type, *content] = message.split(" ")
+        content = " ".join(content)
 
         with t_lock:
             client = socketToIndex(clientSocket)
@@ -57,28 +73,27 @@ def socket_handler(clientSocket: s.socket):
                 client = len(clients)
                 clients.append([clientSocket, "AWAIT", ""])
 
-            content = " ".join(content)
-            date_time = datetime.now().strftime("%d/%m/%Y, %H:%M:%S")
-
             if type == "AUTH_USERNAME":
-                clients[client][2] = "Client connected"
+                sendMessageToClient(client, None, "Client connected")
                 mapPortToUser[clientPort] = content
                 if checkUsernameExists(content):
-                    clients[client][1] = f"{type} SUCCESS"
+                    sendMessageToClient(client, f"{type} SUCCESS", None)
                 else:
-                    clients[client][1] = f"{type} FAIL"
+                    sendMessageToClient(client, f"{type} FAIL", None)
             elif type == 'AUTH_PASSWORD':
                 if checkPassword(mapPortToUser[clientPort], content):
-                    clients[client][1] = f"{type} SUCCESS"
-                    clients[client][2] = f"{mapPortToUser[clientPort]} successfully login"
+                    sendMessageToClient(client, f"{type} SUCCESS", f"{mapPortToUser[clientPort]} successfully login")
                 else:  # delete user from list of active users
-                    clients[client][1] = f"{type} FAIL"
-                    clients[client][2] = "Incorrect password"
+                    sendMessageToClient(client, f"{type} FAIL", "Incorrect password")
                     mapPortToUser.pop(mapPortToUser[clientPort], None)
             elif type == 'AUTH_NEW_PASSWORD':
                 addLogin(mapPortToUser[clientPort], content)
-                clients[client][1] = f"{type} SUCCESS"
-                clients[client][2] = f"{mapPortToUser[clientPort]} successfully login"
+                sendMessageToClient(client, f"{type} SUCCESS", f"{mapPortToUser[clientPort]} successfully login")
+            elif type == 'CRT':
+                if createFile(content, mapPortToUser[clientPort]):
+                    sendMessageToClient(client, f"{type} SUCCESS", f"Thread {content} created")
+                else:
+                    sendMessageToClient(client, f"{type} FAIL", f"Thread {content} exists")
             elif type == 'XIT':
                 del clients[client]
                 print(f"{mapPortToUser[clientPort]} exited")
@@ -89,6 +104,7 @@ def socket_handler(clientSocket: s.socket):
                 clients[client][1] = "INVALID"
                 clients[client][2] = f"Invalid command {type} received"
 
+            # notify other threads
             t_lock.notify()
 
 
@@ -118,11 +134,12 @@ def send_handler():
                 [clientSocket, clientMessage, displayMessage] = clients[i]
                 if clientMessage == "AWAIT":
                     continue
-                clientSocket.send(clientMessage.encode())
+                clientSocket.send(f"{clientMessage}\n{displayMessage}".encode())
                 print(displayMessage)
                 clients[i][1] = "AWAIT"
                 clients[i][2] = ""
 
+            # notify other threads
             t_lock.notify()
 
         time.sleep(UPDATE_INTERVAL)
@@ -135,7 +152,7 @@ if len(sys.argv) != 3:
 PORT = int(sys.argv[1])
 ADMIN_PASSWD = sys.argv[2]
 
-# list of clients
+# list of clients containing a list of sockets, messages to send, messages to display
 clients = []
 
 t_lock = threading.Condition()

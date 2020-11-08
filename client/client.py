@@ -21,14 +21,16 @@ while not loggedIn:
 
     clientSocket.send(f"AUTH_USERNAME {username}".encode())
     message, serverAddress = clientSocket.recvfrom(2048)
+    [status, serverMessage] = message.decode().split("\n")
 
-    if message.decode() == "AUTH_USERNAME SUCCESS":
+    if status == "AUTH_USERNAME SUCCESS":
         password = input("Enter password: ")
         clientSocket.send(f"AUTH_PASSWORD {password}".encode())
 
         message, serverAddress = clientSocket.recvfrom(2048)
+        [status, serverMessage] = message.decode().split("\n")
 
-        if message.decode() == "AUTH_PASSWORD SUCCESS":
+        if status == "AUTH_PASSWORD SUCCESS":
             print(f"Logged in as user {username}")
             print("Welcome to the forum")
             loggedIn = True
@@ -39,11 +41,21 @@ while not loggedIn:
         clientSocket.send(f"AUTH_NEW_PASSWORD {password}".encode())
 
         message, serverAddress = clientSocket.recvfrom(2048)
+        [status, serverMessage] = message.decode().split("\n")
 
-        if message.decode() == "AUTH_NEW_PASSWORD SUCCESS":
+        if status == "AUTH_NEW_PASSWORD SUCCESS":
             print(f"Logged in as user {username}")
             print("Welcome to the forum")
             loggedIn = True
+
+while True:
+    command = input("Enter one of the following commands: CRT, XIT: ")
+    clientSocket.send(command.encode())
+    message = clientSocket.recv(2048).decode()
+    [status, serverMessage] = message.split("\n")
+
+    print(serverMessage)
+    
  
 clientSocket.sendto(f"XIT".encode(), (SERVER_IP, SERVER_PORT))
 clientSocket.close()
