@@ -14,21 +14,36 @@ ADMIN_PASSWD = "admin"
 clientSocket = s.socket(s.AF_INET, s.SOCK_STREAM)
 clientSocket.connect((SERVER_IP, SERVER_PORT))
 
-seq = 0
 loggedIn = False
 
 while not loggedIn:
     username = input("Enter username: ")
-    password = input("Enter password: ")
 
-    clientSocket.send(f"{seq} AUTH {username} {password}".encode())
+    clientSocket.send(f"AUTH_USERNAME {username}".encode())
     message, serverAddress = clientSocket.recvfrom(2048)
 
-    if message.decode() == f"{seq + 1} SUCCESS":
-        loggedIn = True
-        seq += 1
+    if message.decode() == "AUTH_USERNAME SUCCESS":
+        password = input("Enter password: ")
+        clientSocket.send(f"AUTH_PASSWORD {password}".encode())
+
+        message, serverAddress = clientSocket.recvfrom(2048)
+
+        if message.decode() == "AUTH_PASSWORD SUCCESS":
+            print(f"Logged in as user {username}")
+            print("Welcome to the forum")
+            loggedIn = True
+        else:
+            print("Invalid password")
     else:
-        print("AUTH Failed")
+        password = input("Enter new password: ")
+        clientSocket.send(f"AUTH_NEW_PASSWORD {password}".encode())
+
+        message, serverAddress = clientSocket.recvfrom(2048)
+
+        if message.decode() == "AUTH_NEW_PASSWORD SUCCESS":
+            print(f"Logged in as user {username}")
+            print("Welcome to the forum")
+            loggedIn = True
  
-clientSocket.sendto(f"{seq} XIT".encode(), (SERVER_IP, SERVER_PORT))
+clientSocket.sendto(f"XIT".encode(), (SERVER_IP, SERVER_PORT))
 clientSocket.close()

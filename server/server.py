@@ -9,6 +9,89 @@ from datetime import datetime
 
 UPDATE_INTERVAL = 1
 
+mapPortToUser = {}
+
+
+def socketToIndex(socket: s.socket):
+    global clients
+    for i in range(len(clients)):
+        clientSocket = clients[i][0]
+        if clientSocket.getpeername()[1] == socket.getpeername()[1]:
+            return i
+    return -1
+
+
+def checkUsernameExists(username: str):
+    credentials = open("credentials.txt", "r")
+    for credential in credentials:
+        existingUsername = credential.rstrip().split(" ")[0]
+        if username == existingUsername:
+            return True
+    return False
+
+
+def checkPassword(username, password):
+    credentials = open("credentials.txt", "r")
+    for credential in credentials:
+        if f"{username} {password}" == credential.rstrip():
+            return True
+    credentials.close()
+    return False
+
+
+def addLogin(username, password):
+    credentials = open("credentials.txt", "a")
+    credentials.write(f"\n{username} {password}")
+    credentials.close()
+
+
+def socket_handler(clientSocket: s.socket):
+    while True:
+        message = clientSocket.recv(2048).decode()
+        [type, *content] = message.split(" ")
+
+        with t_lock:
+            client = socketToIndex(clientSocket)
+            clientPort = clientSocket.getpeername()[1]
+            if client == -1:  # New client connection
+                client = len(clients)
+                clients.append([clientSocket, "AWAIT", ""])
+
+            content = " ".join(content)
+            date_time = datetime.now().strftime("%d/%m/%Y, %H:%M:%S")
+
+            if type == "AUTH_USERNAME":
+                clients[client][2] = "Client connected"
+                mapPortToUser[clientPort] = content
+                if checkUsernameExists(content):
+                    clients[client][1] = f"{type} SUCCESS"
+                else:
+                    clients[client][1] = f"{type} FAIL"
+            elif type == 'AUTH_PASSWORD':
+                if checkPassword(mapPortToUser[clientPort], content):
+                    clients[client][1] = f"{type} SUCCESS"
+                    clients[client][2] = f"{mapPortToUser[clientPort]} successfully login"
+                else:  # delete user from list of active users
+                    clients[client][1] = f"{type} FAIL"
+                    clients[client][2] = "Incorrect password"
+                    mapPortToUser.pop(mapPortToUser[clientPort], None)
+            elif type == 'AUTH_NEW_PASSWORD':
+                addLogin(mapPortToUser[clientPort], content)
+                clients[client][1] = f"{type} SUCCESS"
+                clients[client][2] = f"{mapPortToUser[clientPort]} successfully login"
+            elif type == 'XIT':
+                del clients[client]
+                print(f"{mapPortToUser[clientPort]} exited")
+                mapPortToUser.pop(mapPortToUser[clientPort], None)
+                clientSocket.close()
+                break
+            else:
+                clients[client][1] = "INVALID"
+                clients[client][2] = f"Invalid command {type} received"
+
+            t_lock.notify()
+
+
 def recv_handler():
     global t_lock
     global clients
@@ -16,17 +99,13 @@ def recv_handler():
     print(f"Server is now listening on PORT {PORT}")
     print("Waiting for clients to connect...")
     while True:
-        # clientSocket: socket
-        # clientAddress: [IP: string, PORT: string]
         clientSocket, clientAddress = serverSocket.accept()
-        message = clientSocket.recv(2048).decode()
-        
-        with t_lock:
-            date_time = datetime.now().strftime("%d/%m/%Y, %H:%M:%S")
-            print(
-                f'Received request from {clientAddress[0]} listening at {clientAddress[1]}: {message} at time {date_time}')
-            clients.append(clientSocket)
-            # Handle various messages the clients send
+
+        # Creates a new thread to handle each client
+        socket_thread = threading.Thread(
+            name=str(clientAddress), target=socket_handler, args=[clientSocket])
+        socket_thread.daemon = False
+        socket_thread.start()
 
 
 def send_handler():
@@ -35,11 +114,17 @@ def send_handler():
     global serverSocket
     while True:
         with t_lock:
-            for clientSocket in clients:
-                date_time = datetime.now().strftime("%d/%m/%Y, %H:%M:%S")
-                message = 'Current time is ' + date_time
-                clientSocket.send(message.encode())
-                print(f"Sending time to {clientSocket.getpeername()[1]}")
+            for i in range(len(clients)):
+                [clientSocket, clientMessage, displayMessage] = clients[i]
+                if clientMessage == "AWAIT":
+                    continue
+                clientSocket.send(clientMessage.encode())
+                print(displayMessage)
+                clients[i][1] = "AWAIT"
+                clients[i][2] = ""
+
+            t_lock.notify()
+
         time.sleep(UPDATE_INTERVAL)
 
 
@@ -53,7 +138,7 @@ ADMIN_PASSWD = sys.argv[2]
 # list of clients
 clients = []
 
-t_lock = threading.RLock()
+t_lock = threading.Condition()
 
 serverSocket = s.socket(s.AF_INET, s.SOCK_STREAM)
 serverSocket.setsockopt(s.SOL_SOCKET, s.SO_REUSEADDR, 1)
