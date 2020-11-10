@@ -121,7 +121,7 @@ def deleteFileLine(name: str, username: str, messageNumber: int):
         return f"Message number {messageNumber} is invalid"
 
     with open(name) as f:
-        content = f.readlines()
+        content = f.readlines()  # stores lines of file as a list
         f.close()
 
     user = content[messageNumber].split(" ")[1]
@@ -135,6 +135,18 @@ def deleteFileLine(name: str, username: str, messageNumber: int):
     f.write(''.join(content))
     f.close()
     return "SUCCESS"
+
+
+# Reads every line except for the first line of the thread
+def readThread(name: str):
+    if not os.path.isfile(name):
+        return "error"
+
+    with open(name) as f:
+        content = f.readlines()  # stores lines of file as a list
+        f.close()
+
+    return "".join(content[1:])
 
 
 def showThreads():
@@ -240,6 +252,17 @@ def socket_handler(clientSocket: s.socket):
                 if not checkMessageValid(0, content, client, username, "No argument should be given"):
                     continue
                 sendMessageToClient(client, f"{type} SUCCESS", showThreads())
+            elif type == 'RDT':
+                print(f"{username} issued {type} command")
+                content = getContent(message)
+                if not checkMessageValid(1, content, client, username, "Must provide only a thread name"):
+                    continue
+                result = readThread(content)
+                if result == "error":
+                    sendMessageToClient(
+                        client, f"{type} FAIL", f"Thread {content} does not exist")
+                else:
+                    sendMessageToClient(client, f"{type} SUCCESS", result)
             elif type == 'XIT':
                 del clients[client]
                 print(f"{username} exited")

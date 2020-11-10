@@ -51,7 +51,8 @@ while not loggedIn:
             print(serverMessage)
 
 while True:
-    command = input("Enter one of the following commands: CRT, MSG, DLT, LST, XIT: ")
+    command = input(
+        "Enter one of the following commands: CRT, MSG, DLT, LST, RDT, XIT: ")
     if command == 'XIT':
         break
     clientSocket.send(command.encode())
@@ -59,7 +60,7 @@ while True:
     [status, *serverMessage] = message.split("\n")
 
     print("\n".join(serverMessage).rstrip())
-    
- 
+
+
 clientSocket.sendto(f"XIT".encode(), (SERVER_IP, SERVER_PORT))
 clientSocket.close()
