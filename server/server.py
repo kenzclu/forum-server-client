@@ -100,8 +100,10 @@ def writeToFile(name, username, content):
     if not os.path.isfile(name):
         return False
 
+    # source: https://stackoverflow.com/questions/845058/how-to-get-line-count-of-a-large-file-cheaply-in-python
+    num_lines = sum(1 for line in open(name, "r"))
     f = open(name, "a")
-    f.write(f"{username}: {content}\n")
+    f.write(f"{num_lines} {username}: {content}\n")
     return True
 
 

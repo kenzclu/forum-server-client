@@ -51,7 +51,7 @@ while not loggedIn:
             print(serverMessage)
 
 while True:
-    command = input("Enter one of the following commands: CRT, XIT: ")
+    command = input("Enter one of the following commands: CRT, MSG, XIT: ")
     clientSocket.send(command.encode())
     message = clientSocket.recv(2048).decode()
     [status, serverMessage] = message.split("\n")
