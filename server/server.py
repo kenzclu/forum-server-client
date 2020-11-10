@@ -42,6 +42,8 @@ def putClientOnWait(client):
 # Sends an error message to client if provided arguments are invalid
 def checkMessageValid(numArgs: int, content: str, client: int, username: str, error: str, exact=True):
     content = content.rstrip()
+    if numArgs == 0 and len(content) == 0:
+        return True
     if exact:
         if len(content) == 0 or len(content.split(" ")) != numArgs:
             sendMessageToClient(client, "INVALID", error)
@@ -123,16 +125,32 @@ def deleteFileLine(name: str, username: str, messageNumber: int):
         f.close()
 
     user = content[messageNumber].split(" ")[1]
-    if user[:-1] != username: # Checks if user is the user that posted
+    if user[:-1] != username:  # Checks if user is the user that posted
         return "Permission denied"
     f = open(name, "w")
     del content[messageNumber]
     for i in range(1, len(content)):
         [_, *rest] = content[i].split(" ")
-        content[i] = f"{i} {' '.join(rest)}" # Updates the line numbers
+        content[i] = f"{i} {' '.join(rest)}"  # Updates the line numbers
     f.write(''.join(content))
     f.close()
     return "SUCCESS"
+
+
+def showThreads():
+    # source: https://stackoverflow.com/questions/11968976/list-files-only-in-the-current-directory
+    files = [f for f in os.listdir('.') if os.path.isfile(f)]
+    threads = []
+    message = "The list of active threads:\n"
+    for f in files:
+        if len(f.split(".")) == 1:  # checks that file has no extensions
+            threads.append(f)
+    if len(threads) == 0:
+        return "No active threads exist"
+    else:
+        for thread in threads:
+            message += f"{thread}\n"
+    return message
 
 
 def socket_handler(clientSocket: s.socket):
@@ -216,6 +234,12 @@ def socket_handler(clientSocket: s.socket):
                 else:
                     sendMessageToClient(
                         client, f"{type} SUCCESS", f"{messageNumber} deleted from {thread} thread")
+            elif type == 'LST':
+                print(f"{username} issued {type} command")
+                content = getContent(message)
+                if not checkMessageValid(0, content, client, username, "No argument should be given"):
+                    continue
+                sendMessageToClient(client, f"{type} SUCCESS", showThreads())
             elif type == 'XIT':
                 del clients[client]
                 print(f"{username} exited")
@@ -259,7 +283,7 @@ def send_handler():
                     continue
                 clientSocket.send(
                     f"{clientMessage}\n{displayMessage}".encode())
-                print(displayMessage)
+                print(displayMessage.rstrip())
                 putClientOnWait(i)
 
             # notify other threads
