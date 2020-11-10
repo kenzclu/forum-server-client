@@ -40,7 +40,7 @@ def putClientOnWait(client):
 
 
 # Sends an error message to client if provided arguments are invalid
-def checkMessageValid(numArgs: int, content: str, client: int, username: str, error: str):
+def checkMessageValid(numArgs: int, content: str, client: int, username: str, error: str, exact = True):
     content = content.rstrip()
     if numArgs == 1:
         if len(content.split(" ")) != 1:
@@ -52,9 +52,14 @@ def checkMessageValid(numArgs: int, content: str, client: int, username: str, er
             sendMessageToClient(client, "INVALID", error)
             return False
     elif numArgs == 2:
-        if len(content.split(" ")) < 2:
-            sendMessageToClient(client, "INVALID", error)
-            return False
+        if exact:
+            if len(content.split(" ")) != 2:
+                sendMessageToClient(client, "INVALID", error)
+                return False
+        else:
+            if len(content.split(" ")) < 2:
+                sendMessageToClient(client, "INVALID", error)
+                return False
     return True
 
 
@@ -76,7 +81,7 @@ def checkUsernameExists(username: str):
     return False
 
 
-def checkPassword(username, password):
+def checkPassword(username: str, password: str):
     credentials = open("credentials.txt", "r")
     for credential in credentials:
         if f"{username} {password}" == credential.rstrip():
@@ -85,22 +90,23 @@ def checkPassword(username, password):
     return False
 
 
-def addLogin(username, password):
+def addLogin(username: str, password: str):
     credentials = open("credentials.txt", "a")
     credentials.write(f"\n{username} {password}")
     credentials.close()
 
 
-def createFile(name, username):
+def createFile(name: str, username: str):
     try:
         f = open(name, "x")
         f.write(f"{username}\n")
+        f.close()
         return True
     except:
         return False
 
 
-def writeToFile(name, username, content):
+def writeToFile(name: str, username: str, content: str):
     if not os.path.isfile(name):
         return False
 
@@ -108,8 +114,34 @@ def writeToFile(name, username, content):
     num_lines = sum(1 for line in open(name, "r"))
     f = open(name, "a")
     f.write(f"{num_lines} {username}: {content}\n")
+    f.close()
     return True
 
+def deleteFileLine(name: str, username: str, messageNumber: int):
+    if not os.path.isfile(name):
+        return f"Thread {name} does not exist"
+
+    # source: https://stackoverflow.com/questions/845058/how-to-get-line-count-of-a-large-file-cheaply-in-python
+    num_lines = sum(1 for line in open(name, "r"))
+    if messageNumber >= num_lines or messageNumber < 1:
+        return f"Message number {messageNumber} is invalid"
+    
+    with open(name) as f:
+        content = f.readlines()
+        f.close()
+    
+    user = content[messageNumber].split(" ")[1]
+    print("user", user, "username", username)
+    if user[:-1] != username:
+        return "Permission denied"
+    f = open(name, "w")
+    del content[messageNumber]
+    for i in range(1, len(content)):
+        [_, *rest] = content[i].split(" ")
+        content[i] = f"{i} {' '.join(rest)}"
+    f.write(''.join(content))
+    f.close()
+    return "SUCCESS"
 
 def socket_handler(clientSocket: s.socket):
     while True:
@@ -169,7 +201,7 @@ def socket_handler(clientSocket: s.socket):
             elif type == 'MSG':
                 print(f"{username} issued {type} command")
                 content = getContent(message)
-                if not checkMessageValid(2, content, client, username, "Must provide both a thread name and a message"):
+                if not checkMessageValid(2, content, client, username, "Must provide both a thread name and a message", False):
                     continue
                 [thread, *message] = content.split(" ")
                 if writeToFile(thread, username, " ".join(message).rstrip()):
@@ -178,6 +210,17 @@ def socket_handler(clientSocket: s.socket):
                 else:
                     sendMessageToClient(
                         client, f"{type} FAIL", f"Thread {thread} does not exist")
+            elif type == 'DLT':
+                print(f"{username} issued {type} command")
+                content = getContent(message)
+                if not checkMessageValid(2, content, client, username, "Must provide both a thread name and a message number"):
+                    continue
+                [thread, messageNumber] = content.split(" ")
+                result = deleteFileLine(thread, username, int(messageNumber))
+                if result != "SUCCESS":
+                    sendMessageToClient(client, f"{type} FAIL", result)
+                else:
+                    sendMessageToClient(client, f"{type} SUCCESS", f"{messageNumber} deleted from {thread} thread")
             elif type == 'XIT':
                 del clients[client]
                 print(f"{username} exited")
