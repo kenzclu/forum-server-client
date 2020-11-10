@@ -11,7 +11,7 @@ UPDATE_INTERVAL = 1
 
 mapPortToUser = {}
 
-
+# Returns the index of the respective socket
 def socketToIndex(socket: s.socket):
     global clients
     for i in range(len(clients)):
@@ -20,6 +20,32 @@ def socketToIndex(socket: s.socket):
             return i
     return -1
 
+
+# Gets the content of the message from client
+def getContent(message):
+    [_, *content] = message.split(" ")
+    return " ".join(content)
+
+
+def untrackUser(clientPort: str):
+    mapPortToUser.pop(mapPortToUser[clientPort], None)
+
+
+# Sends an error message to client if provided arguments are invalid
+def checkMessageValid(numArgs: int, content: str, client: int, clientPort: str, error: str):
+    if numArgs == 1:
+        if len(content.split(" ")) != 1:
+            sendMessageToClient(client, "INVALID",
+                                "No whitespaces allowed")
+            return False
+        elif len(content) == 0:
+            untrackUser(clientPort)
+            sendMessageToClient(client, "INVALID", error)
+            return False
+        return True
+
+
+# Sends clientMessage to the client, and prints the display message
 def sendMessageToClient(client: int, clientMessage: str, displayMessage: str):
     global clients
     if clientMessage != None:
@@ -51,6 +77,7 @@ def addLogin(username, password):
     credentials.write(f"\n{username} {password}")
     credentials.close()
 
+
 def createFile(name, username):
     try:
         f = open(name, "x")
@@ -63,8 +90,7 @@ def createFile(name, username):
 def socket_handler(clientSocket: s.socket):
     while True:
         message = clientSocket.recv(2048).decode()
-        [type, *content] = message.split(" ")
-        content = " ".join(content)
+        type = message.split(" ")[0]
 
         with t_lock:
             client = socketToIndex(clientSocket)
@@ -75,34 +101,51 @@ def socket_handler(clientSocket: s.socket):
 
             if type == "AUTH_USERNAME":
                 sendMessageToClient(client, None, "Client connected")
+                content = getContent(message)
+                if not checkMessageValid(1, content, client, clientPort, "Username must be at least one character"):
+                    continue
                 mapPortToUser[clientPort] = content
                 if checkUsernameExists(content):
                     sendMessageToClient(client, f"{type} SUCCESS", None)
                 else:
                     sendMessageToClient(client, f"{type} FAIL", None)
             elif type == 'AUTH_PASSWORD':
+                content = getContent(message)
+                if not checkMessageValid(1, content, client, clientPort, "Password must be at least one character"):
+                    continue
                 if checkPassword(mapPortToUser[clientPort], content):
-                    sendMessageToClient(client, f"{type} SUCCESS", f"{mapPortToUser[clientPort]} successfully login")
+                    sendMessageToClient(
+                        client, f"{type} SUCCESS", f"{mapPortToUser[clientPort]} successfully login")
                 else:  # delete user from list of active users
-                    sendMessageToClient(client, f"{type} FAIL", "Incorrect password")
-                    mapPortToUser.pop(mapPortToUser[clientPort], None)
+                    sendMessageToClient(
+                        client, f"{type} FAIL", "Incorrect password")
+                    untrackUser(clientPort)
             elif type == 'AUTH_NEW_PASSWORD':
+                content = getContent(message)
+                if not checkMessageValid(1, content, client, clientPort, "Password must be at least one character"):
+                    continue
                 addLogin(mapPortToUser[clientPort], content)
-                sendMessageToClient(client, f"{type} SUCCESS", f"{mapPortToUser[clientPort]} successfully login")
+                sendMessageToClient(
+                    client, f"{type} SUCCESS", f"{mapPortToUser[clientPort]} successfully login")
             elif type == 'CRT':
+                content = getContent(message)
+                if not checkMessageValid(1, content, client, clientPort, "Thread title must be at least one character"):
+                    continue
                 if createFile(content, mapPortToUser[clientPort]):
-                    sendMessageToClient(client, f"{type} SUCCESS", f"Thread {content} created")
+                    sendMessageToClient(
+                        client, f"{type} SUCCESS", f"Thread {content} created")
                 else:
-                    sendMessageToClient(client, f"{type} FAIL", f"Thread {content} exists")
+                    sendMessageToClient(
+                        client, f"{type} FAIL", f"Thread {content} exists")
             elif type == 'XIT':
                 del clients[client]
                 print(f"{mapPortToUser[clientPort]} exited")
-                mapPortToUser.pop(mapPortToUser[clientPort], None)
+                untrackUser(clientPort)
                 clientSocket.close()
                 break
             else:
-                clients[client][1] = "INVALID"
-                clients[client][2] = f"Invalid command {type} received"
+                sendMessageToClient(client, "INVALID",
+                                    f"Invalid command {type} received")
 
             # notify other threads
             t_lock.notify()
@@ -134,7 +177,8 @@ def send_handler():
                 [clientSocket, clientMessage, displayMessage] = clients[i]
                 if clientMessage == "AWAIT":
                     continue
-                clientSocket.send(f"{clientMessage}\n{displayMessage}".encode())
+                clientSocket.send(
+                    f"{clientMessage}\n{displayMessage}".encode())
                 print(displayMessage)
                 clients[i][1] = "AWAIT"
                 clients[i][2] = ""

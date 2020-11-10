@@ -35,7 +35,7 @@ while not loggedIn:
             print("Welcome to the forum")
             loggedIn = True
         else:
-            print("Invalid password")
+            print(serverMessage)
     else:
         password = input("Enter new password: ")
         clientSocket.send(f"AUTH_NEW_PASSWORD {password}".encode())
@@ -47,6 +47,8 @@ while not loggedIn:
             print(f"Logged in as user {username}")
             print("Welcome to the forum")
             loggedIn = True
+        else:
+            print(serverMessage)
 
 while True:
     command = input("Enter one of the following commands: CRT, XIT: ")
