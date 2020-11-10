@@ -12,6 +12,7 @@ UPDATE_INTERVAL = 1
 
 mapPortToUser = {}
 
+
 # Returns the index of the respective socket
 def socketToIndex(socket: s.socket):
     global clients
@@ -28,10 +29,12 @@ def getContent(message):
     return " ".join(content)
 
 
+# Removes the user from logged in users
 def untrackUser(username: str):
     mapPortToUser.pop(username, None)
 
 
+# Sets the client as waiting
 def putClientOnWait(client):
     sendMessageToClient(client, "AWAIT", "")
 
@@ -95,6 +98,7 @@ def createFile(name, username):
         return True
     except:
         return False
+
 
 def writeToFile(name, username, content):
     if not os.path.isfile(name):
@@ -172,7 +176,8 @@ def socket_handler(clientSocket: s.socket):
                     sendMessageToClient(
                         client, f"{type} SUCCESS", f"Message posted to {thread} thread")
                 else:
-                    sendMessageToClient(client, f"{type} FAIL", f"Thread {thread} does not exist")
+                    sendMessageToClient(
+                        client, f"{type} FAIL", f"Thread {thread} does not exist")
             elif type == 'XIT':
                 del clients[client]
                 print(f"{username} exited")
