@@ -1,7 +1,7 @@
 # forum server (python3)
 # z5259931
 
-import os.path
+import os
 import socket as s
 import sys
 import threading
@@ -29,7 +29,7 @@ def getContent(message):
     return " ".join(content)
 
 
-# Removes the user from logged in users
+# Removes the user from list of active users
 def untrackUser(username: str):
     mapPortToUser.pop(username, None)
 
@@ -40,26 +40,16 @@ def putClientOnWait(client):
 
 
 # Sends an error message to client if provided arguments are invalid
-def checkMessageValid(numArgs: int, content: str, client: int, username: str, error: str, exact = True):
+def checkMessageValid(numArgs: int, content: str, client: int, username: str, error: str, exact=True):
     content = content.rstrip()
-    if numArgs == 1:
-        if len(content.split(" ")) != 1:
-            sendMessageToClient(client, "INVALID",
-                                "No whitespaces allowed")
-            return False
-        elif len(content) == 0:
-            untrackUser(username)
+    if exact:
+        if len(content) == 0 or len(content.split(" ")) != numArgs:
             sendMessageToClient(client, "INVALID", error)
             return False
-    elif numArgs == 2:
-        if exact:
-            if len(content.split(" ")) != 2:
-                sendMessageToClient(client, "INVALID", error)
-                return False
-        else:
-            if len(content.split(" ")) < 2:
-                sendMessageToClient(client, "INVALID", error)
-                return False
+    else:
+        if len(content.split(" ")) < numArgs:
+            sendMessageToClient(client, "INVALID", error)
+            return False
     return True
 
 
@@ -117,6 +107,8 @@ def writeToFile(name: str, username: str, content: str):
     f.close()
     return True
 
+
+# deletes the specified message number if valid
 def deleteFileLine(name: str, username: str, messageNumber: int):
     if not os.path.isfile(name):
         return f"Thread {name} does not exist"
@@ -125,23 +117,23 @@ def deleteFileLine(name: str, username: str, messageNumber: int):
     num_lines = sum(1 for line in open(name, "r"))
     if messageNumber >= num_lines or messageNumber < 1:
         return f"Message number {messageNumber} is invalid"
-    
+
     with open(name) as f:
         content = f.readlines()
         f.close()
-    
+
     user = content[messageNumber].split(" ")[1]
-    print("user", user, "username", username)
-    if user[:-1] != username:
+    if user[:-1] != username: # Checks if user is the user that posted
         return "Permission denied"
     f = open(name, "w")
     del content[messageNumber]
     for i in range(1, len(content)):
         [_, *rest] = content[i].split(" ")
-        content[i] = f"{i} {' '.join(rest)}"
+        content[i] = f"{i} {' '.join(rest)}" # Updates the line numbers
     f.write(''.join(content))
     f.close()
     return "SUCCESS"
+
 
 def socket_handler(clientSocket: s.socket):
     while True:
@@ -162,7 +154,7 @@ def socket_handler(clientSocket: s.socket):
             if type == "AUTH_USERNAME":
                 sendMessageToClient(client, None, "Client connected")
                 content = getContent(message)
-                if not checkMessageValid(1, content, client, username, "Username must be at least one character"):
+                if not checkMessageValid(1, content, client, username, "Username must be at least one character with no whitespace"):
                     continue
                 mapPortToUser[clientPort] = content
                 if checkUsernameExists(content):
@@ -171,7 +163,8 @@ def socket_handler(clientSocket: s.socket):
                     sendMessageToClient(client, f"{type} FAIL", None)
             elif type == 'AUTH_PASSWORD':
                 content = getContent(message)
-                if not checkMessageValid(1, content, client, username, "Password must be at least one character"):
+                if not checkMessageValid(1, content, client, username, "Password must be at least one character with no whitespace"):
+                    untrackUser(username)
                     continue
                 if checkPassword(username, content):
                     sendMessageToClient(
@@ -182,7 +175,8 @@ def socket_handler(clientSocket: s.socket):
                     untrackUser(username)
             elif type == 'AUTH_NEW_PASSWORD':
                 content = getContent(message)
-                if not checkMessageValid(1, content, client, username, "Password must be at least one character"):
+                if not checkMessageValid(1, content, client, username, "Password must be at least one character with no whitespace"):
+                    untrackUser(username)
                     continue
                 addLogin(username, content)
                 sendMessageToClient(
@@ -190,7 +184,7 @@ def socket_handler(clientSocket: s.socket):
             elif type == 'CRT':
                 print(f"{username} issued {type} command")
                 content = getContent(message)
-                if not checkMessageValid(1, content, client, username, "Thread title must be at least one character"):
+                if not checkMessageValid(1, content, client, username, "Thread title must be at least one character with no whitespace"):
                     continue
                 if createFile(content, username):
                     sendMessageToClient(
@@ -220,7 +214,8 @@ def socket_handler(clientSocket: s.socket):
                 if result != "SUCCESS":
                     sendMessageToClient(client, f"{type} FAIL", result)
                 else:
-                    sendMessageToClient(client, f"{type} SUCCESS", f"{messageNumber} deleted from {thread} thread")
+                    sendMessageToClient(
+                        client, f"{type} SUCCESS", f"{messageNumber} deleted from {thread} thread")
             elif type == 'XIT':
                 del clients[client]
                 print(f"{username} exited")
