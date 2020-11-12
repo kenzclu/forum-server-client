@@ -2,6 +2,7 @@
 # z5259931
 
 import os
+import select
 import socket as s
 import sys
 
@@ -9,9 +10,16 @@ if len(sys.argv) != 3:
     sys.stderr.write("USAGE: python3 client.py <SERVER_IP> <SERVER_PORT>")
     exit(1)
 
+
+# Checks if socket is closed
+def isSocketClosed(message: str):
+    if message == '':
+        print("Connection closed")
+        exit(0)
+
+
 SERVER_IP = sys.argv[1]
 SERVER_PORT = int(sys.argv[2])
-ADMIN_PASSWD = "admin"
 clientSocket = s.socket(s.AF_INET, s.SOCK_STREAM)
 clientSocket.connect((SERVER_IP, SERVER_PORT))
 
@@ -22,6 +30,7 @@ while not loggedIn:
 
     clientSocket.send(f"AUTH_USERNAME {username}".encode())
     message, serverAddress = clientSocket.recvfrom(2048)
+    isSocketClosed(message.decode())
     [status, serverMessage] = message.decode().split("\n")
 
     if status == "AUTH_USERNAME SUCCESS":
@@ -29,6 +38,7 @@ while not loggedIn:
         clientSocket.send(f"AUTH_PASSWORD {password}".encode())
 
         message, serverAddress = clientSocket.recvfrom(2048)
+        isSocketClosed(message.decode())
         [status, serverMessage] = message.decode().split("\n")
 
         if status == "AUTH_PASSWORD SUCCESS":
@@ -42,6 +52,7 @@ while not loggedIn:
         clientSocket.send(f"AUTH_NEW_PASSWORD {password}".encode())
 
         message, serverAddress = clientSocket.recvfrom(2048)
+        isSocketClosed(message.decode())
         [status, serverMessage] = message.decode().split("\n")
 
         if status == "AUTH_NEW_PASSWORD SUCCESS":
@@ -55,18 +66,18 @@ while not loggedIn:
 
 while True:
     command = input(
-        "Enter one of the following commands: CRT, MSG, DLT, LST, RDT, UPD, DWN, XIT: ")
+        "Enter one of the following commands: CRT, MSG, DLT, LST, RDT, UPD, DWN, RMV, XIT, SHT: ")
     type = command.split(" ")[0]
-    if type == 'XIT':
-        break
-    elif type == 'UPD' or type == 'DWN':
+    if type == 'UPD' or type == 'DWN':
+        # Sends the current working directory for UPD and DWN commands
         command = f"{command.rstrip()} {os.getcwd()}"
     clientSocket.send(command.encode())
     message = clientSocket.recv(2048).decode()
+    isSocketClosed(message)
     [status, *serverMessage] = message.split("\n")
 
     print("\n".join(serverMessage).rstrip())
+    if (status == 'EXIT'):
+        break
 
-
-clientSocket.sendto(f"XIT".encode(), (SERVER_IP, SERVER_PORT))
 clientSocket.close()

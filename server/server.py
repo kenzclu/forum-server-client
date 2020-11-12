@@ -9,11 +9,15 @@ import time
 from datetime import datetime
 
 UPDATE_INTERVAL = 1
+SHUTDOWN = 'DISABLED'
 
 mapPortToUser = {}
+# Forum threads
 threads = []
 # Stores list of downloaded files (value) at the thread (key)
 uploadedFiles = {}
+# active socketHandlers
+activeThreads = {}
 
 
 # Returns the index of the respective socket
@@ -34,7 +38,10 @@ def getContent(message):
 
 # Removes the user from list of active users
 def untrackUser(username: str):
-    mapPortToUser.pop(username, None)
+    for k, v in mapPortToUser.items():
+        if v == username:
+            del mapPortToUser[k]
+            break
 
 
 # Sets the client as waiting
@@ -77,7 +84,6 @@ def checkFileUploaded(thread: str, file: str):
 
 # Sends clientMessage to the client, and prints the display message
 def sendMessageToClient(client: int, clientMessage: str, displayMessage: str):
-    global clients
     if clientMessage != None:
         clients[client][1] = clientMessage
     if displayMessage != None:
@@ -240,10 +246,26 @@ def downloadFile(thread: str, file: str, path: str):
     return "SUCCESS"
 
 
+def shutdown():
+    global SHUTDOWN
+    for i in range(len(clients)):
+        sendMessageToClient(i, "EXIT", "Shutting down server\n")
+    for thread in threads:  # remove all threads
+        os.remove(thread)
+    for _, v in uploadedFiles.items():  # remove all uploaded files
+        for files in v:
+            file = files.split(" ")[-1]
+            os.remove(f"{thread}-{file}")
+    SHUTDOWN = 'IN_PROGRESS'
+
+
 def socket_handler(clientSocket: s.socket):
     while True:
         message = clientSocket.recv(2048).decode()
         type = message.split(" ")[0]
+
+        if message == '':
+            break
 
         with t_lock:
             client = socketToIndex(clientSocket)
@@ -383,13 +405,22 @@ def socket_handler(clientSocket: s.socket):
                         client, f"{type} SUCCESS", f"{username} deleted {thread} thread")
                 else:
                     sendMessageToClient(client, f"{type} SUCCESS", result)
-            elif type == 'XIT':
-                del clients[client]
-                print(f"{username} exited")
+            elif type == 'XIT': # Client leaves
+                print(f"{username} issued {type} command")
+                sendMessageToClient(client, "EXIT", f"Goodbye {username}")
                 untrackUser(username)
-                clientSocket.close()
                 t_lock.notify()
                 break
+            elif type == 'SHT': # Server is shutdown
+                print(f"{username} issued {type} command")
+                content = getContent(message)
+                if not checkMessageValid(1, content, client, "Must provide the admin password"):
+                    continue
+                if content != ADMIN_PASSWD:
+                    sendMessageToClient(
+                        client, f"{type} FAIL", "Incorrect admin password")
+                else:
+                    shutdown()
             else:
                 sendMessageToClient(client, "INVALID",
                                     f"Invalid command {type} received")
@@ -410,25 +441,34 @@ def recv_handler():
         # Creates a new thread to handle each client
         socket_thread = threading.Thread(
             name=str(clientAddress), target=socket_handler, args=[clientSocket])
-        socket_thread.daemon = False
+        socket_thread.daemon = True
         socket_thread.start()
+        activeThreads[str(clientAddress)] = socket_thread
 
 
 def send_handler():
     global t_lock
     global clients
     global serverSocket
+    global SHUTDOWN
     while True:
         with t_lock:
-            for i in range(len(clients)):
+            for i in reversed(range(len(clients))):  # iterate backwards
                 [clientSocket, clientMessage, displayMessage] = clients[i]
                 if clientMessage == "AWAIT":
                     continue
                 clientSocket.send(
                     f"{clientMessage}\n{displayMessage}".encode())
-                print(displayMessage.rstrip())
-                putClientOnWait(i)
-
+                if SHUTDOWN == 'DISABLED':
+                    print(displayMessage.rstrip())
+                if clientMessage == "EXIT":
+                    clientSocket.shutdown(s.SHUT_RDWR)
+                    del clients[i]
+                else:
+                    putClientOnWait(i)
+            if SHUTDOWN == 'IN_PROGRESS':
+                SHUTDOWN = 'READY'
+                break
             # notify other threads
             t_lock.notify()
 
@@ -461,4 +501,7 @@ send_thread.daemon = True
 send_thread.start()
 
 while True:
+    if SHUTDOWN == 'READY':
+        print("Shutting down server")
+        break
     time.sleep(0.1)
