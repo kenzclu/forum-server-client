@@ -1,6 +1,7 @@
 # forum client (python3)
 # z5259931
 
+import os
 import socket as s
 import sys
 
@@ -55,8 +56,11 @@ while not loggedIn:
 while True:
     command = input(
         "Enter one of the following commands: CRT, MSG, DLT, LST, RDT, UPD, DWN, XIT: ")
-    if command == 'XIT':
+    type = command.split(" ")[0]
+    if type == 'XIT':
         break
+    elif type == 'UPD' or type == 'DWN':
+        command = f"{command.rstrip()} {os.getcwd()}"
     clientSocket.send(command.encode())
     message = clientSocket.recv(2048).decode()
     [status, *serverMessage] = message.split("\n")

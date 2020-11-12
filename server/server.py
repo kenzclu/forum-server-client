@@ -186,14 +186,14 @@ def showThreads():
 
 
 # Uploads file to thread
-def uploadFile(thread: str, file: str):
+def uploadFile(thread: str, file: str, path: str):
     if not thread in threads:
         return f"Thread {thread} does not exist"
-    if not os.path.isfile(file):
+    if not os.path.isfile(f"{path}/{file}"):
         return f"File {file} does not exist"
     # Source: https://stackoverflow.com/questions/36875258/copying-one-files-contents-to-another-in-python
     # Copies content of one file to another
-    with open(f"{thread}-{file}", 'wb+') as output, open(file, 'rb') as input:
+    with open(f"{thread}-{file}", 'wb+') as output, open(f"{path}/{file}", 'rb') as input:
         while True:
             data = input.read(100000)
             if data == b'':  # end of file reached
@@ -205,12 +205,12 @@ def uploadFile(thread: str, file: str):
 
 
 # Download file from thread
-def downloadFile(thread: str, file: str):
+def downloadFile(thread: str, file: str, path: str):
     if not thread in threads:
         return f"Thread {thread} does not exist"
     elif not thread in uploadedFiles or not checkFileUploaded(thread, file):
         return f"{file} does not exist in Thread {thread}"
-    with open(file, 'wb+') as output, open(f"{thread}-{file}", 'rb') as input:
+    with open(f"{path}/{file}", 'wb+') as output, open(f"{thread}-{file}", 'rb') as input:
         while True:
             data = input.read(100000)
             if data == b'':  # end of file reached
@@ -324,13 +324,13 @@ def socket_handler(clientSocket: s.socket):
                         client, f"{type} FAIL", f"Thread {content} does not exist")
                 else:
                     sendMessageToClient(client, f"{type} SUCCESS", result)
-            elif type == 'UPD':
+            elif type == 'UPD': # Upload a file
                 print(f"{username} issued {type} command")
                 content = getContent(message)
-                if not checkMessageValid(2, content, client, "Must provide a thread and filename"):
+                if not checkMessageValid(3, content, client, "Must provide a thread and filename"):
                     continue
-                [thread, file] = content.split(" ")
-                result = uploadFile(thread, file)
+                [thread, file, path] = content.split(" ")
+                result = uploadFile(thread, file, path)
                 if result == "SUCCESS":
                     sendMessageToClient(
                         client, f"{type} SUCCESS", f"{username} successfully uploaded {file} to {thread} thread")
@@ -344,10 +344,10 @@ def socket_handler(clientSocket: s.socket):
             elif type == 'DWN':
                 print(f"{username} issued {type} command")
                 content = getContent(message)
-                if not checkMessageValid(2, content, client, "Must provide a thread and filename"):
+                if not checkMessageValid(3, content, client, "Must provide a thread and filename"):
                     continue
-                [thread, file] = content.split(" ")
-                result = downloadFile(thread, file)
+                [thread, file, path] = content.split(" ")
+                result = downloadFile(thread, file, path)
                 if result == "SUCCESS":
                     sendMessageToClient(client, f"{type} SUCCESS", f"{file} successfully downloaded")
                 else:
