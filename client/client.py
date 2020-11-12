@@ -36,7 +36,7 @@ while not loggedIn:
             loggedIn = True
         else:
             print(serverMessage)
-    else:
+    elif status == "AUTH_USERNAME FAIL":
         password = input("Enter new password: ")
         clientSocket.send(f"AUTH_NEW_PASSWORD {password}".encode())
 
@@ -49,10 +49,12 @@ while not loggedIn:
             loggedIn = True
         else:
             print(serverMessage)
+    else:
+        print(serverMessage)
 
 while True:
     command = input(
-        "Enter one of the following commands: CRT, MSG, DLT, LST, RDT, XIT: ")
+        "Enter one of the following commands: CRT, MSG, DLT, LST, RDT, UPD, XIT: ")
     if command == 'XIT':
         break
     clientSocket.send(command.encode())

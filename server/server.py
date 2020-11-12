@@ -11,6 +11,8 @@ from datetime import datetime
 UPDATE_INTERVAL = 1
 
 mapPortToUser = {}
+threads = []
+uploadedFiles = {}
 
 
 # Returns the index of the respective socket
@@ -39,8 +41,16 @@ def putClientOnWait(client):
     sendMessageToClient(client, "AWAIT", "")
 
 
+# Checks if user is logged in
+def checkUserLoggedIn(user: str):
+    for port in mapPortToUser:
+        if mapPortToUser[port] == user:
+            return True
+    return False
+
+
 # Sends an error message to client if provided arguments are invalid
-def checkMessageValid(numArgs: int, content: str, client: int, username: str, error: str, exact=True):
+def checkMessageValid(numArgs: int, content: str, client: int, error: str, exact=True):
     content = content.rstrip()
     if numArgs == 0 and len(content) == 0:
         return True
@@ -99,7 +109,7 @@ def createFile(name: str, username: str):
 
 
 def writeToFile(name: str, username: str, content: str):
-    if not os.path.isfile(name):
+    if not name in threads:
         return False
 
     # source: https://stackoverflow.com/questions/845058/how-to-get-line-count-of-a-large-file-cheaply-in-python
@@ -112,7 +122,7 @@ def writeToFile(name: str, username: str, content: str):
 
 # deletes the specified message number if valid
 def deleteFileLine(name: str, username: str, messageNumber: int):
-    if not os.path.isfile(name):
+    if not name in threads:
         return f"Thread {name} does not exist"
 
     # source: https://stackoverflow.com/questions/845058/how-to-get-line-count-of-a-large-file-cheaply-in-python
@@ -139,30 +149,51 @@ def deleteFileLine(name: str, username: str, messageNumber: int):
 
 # Reads every line except for the first line of the thread
 def readThread(name: str):
-    if not os.path.isfile(name):
+    if not name in threads:
         return "error"
 
     with open(name) as f:
         content = f.readlines()  # stores lines of file as a list
         f.close()
 
+    if name in uploadedFiles:
+        for file in uploadedFiles[name]:
+            content.append(file + '\n')
+
+    if len(content) == 1:
+        return f"Thread {name} is empty"
     return "".join(content[1:])
 
 
+# Lists active threads
 def showThreads():
-    # source: https://stackoverflow.com/questions/11968976/list-files-only-in-the-current-directory
-    files = [f for f in os.listdir('.') if os.path.isfile(f)]
-    threads = []
-    message = "The list of active threads:\n"
-    for f in files:
-        if len(f.split(".")) == 1:  # checks that file has no extensions
-            threads.append(f)
     if len(threads) == 0:
         return "No active threads exist"
-    else:
-        for thread in threads:
-            message += f"{thread}\n"
+    message = "The list of active threads:\n"
+    for thread in threads:
+        message += f"{thread}\n"
     return message
+
+
+# Uploads file to thread
+def uploadFile(thread: str, file: str):
+    if not thread in threads:
+        return f"Thread {thread} does not exist"
+    if not os.path.isfile(file):
+        return f"File {file} does not exist"
+    # Source: https://stackoverflow.com/questions/36875258/copying-one-files-contents-to-another-in-python
+    # Copies content of one file to another
+    with open(f"{thread}-{file}", 'wb+') as output, open(file, 'rb') as input:
+        while True:
+            data = input.read(100000)
+            print(data)
+            if data == b'':  # end of file reached
+                break
+            output.write(data)
+        output.close()
+        input.close()
+    print('end')
+    return "SUCCESS"
 
 
 def socket_handler(clientSocket: s.socket):
@@ -181,19 +212,23 @@ def socket_handler(clientSocket: s.socket):
             elif clientPort in mapPortToUser:
                 username = mapPortToUser[clientPort]
 
-            if type == "AUTH_USERNAME":
+            if type == "AUTH_USERNAME":  # Clience inputs a username
                 sendMessageToClient(client, None, "Client connected")
                 content = getContent(message)
-                if not checkMessageValid(1, content, client, username, "Username must be at least one character with no whitespace"):
+                if not checkMessageValid(1, content, client, "Username must be at least one character with no whitespace"):
+                    continue
+                elif checkUserLoggedIn(content):
+                    sendMessageToClient(client, "INVALID",
+                                        f"{content} is already logged in")
                     continue
                 mapPortToUser[clientPort] = content
                 if checkUsernameExists(content):
                     sendMessageToClient(client, f"{type} SUCCESS", None)
                 else:
                     sendMessageToClient(client, f"{type} FAIL", None)
-            elif type == 'AUTH_PASSWORD':
+            elif type == 'AUTH_PASSWORD':  # Client inputs a password
                 content = getContent(message)
-                if not checkMessageValid(1, content, client, username, "Password must be at least one character with no whitespace"):
+                if not checkMessageValid(1, content, client, "Password must be at least one character with no whitespace"):
                     untrackUser(username)
                     continue
                 if checkPassword(username, content):
@@ -203,29 +238,30 @@ def socket_handler(clientSocket: s.socket):
                     sendMessageToClient(
                         client, f"{type} FAIL", "Incorrect password")
                     untrackUser(username)
-            elif type == 'AUTH_NEW_PASSWORD':
+            elif type == 'AUTH_NEW_PASSWORD':  # Client creates a new user with a new password
                 content = getContent(message)
-                if not checkMessageValid(1, content, client, username, "Password must be at least one character with no whitespace"):
+                if not checkMessageValid(1, content, client, "Password must be at least one character with no whitespace"):
                     untrackUser(username)
                     continue
                 addLogin(username, content)
                 sendMessageToClient(
                     client, f"{type} SUCCESS", f"{username} successfully login")
-            elif type == 'CRT':
+            elif type == 'CRT':  # Client creates a thread
                 print(f"{username} issued {type} command")
                 content = getContent(message)
-                if not checkMessageValid(1, content, client, username, "Thread title must be at least one character with no whitespace"):
+                if not checkMessageValid(1, content, client, "Thread title must be at least one character with no whitespace"):
                     continue
                 if createFile(content, username):
                     sendMessageToClient(
                         client, f"{type} SUCCESS", f"Thread {content} created")
+                    threads.append(content)
                 else:
                     sendMessageToClient(
                         client, f"{type} FAIL", f"Thread {content} exists")
-            elif type == 'MSG':
+            elif type == 'MSG':  # Client sends a message to a thread
                 print(f"{username} issued {type} command")
                 content = getContent(message)
-                if not checkMessageValid(2, content, client, username, "Must provide both a thread name and a message", False):
+                if not checkMessageValid(2, content, client, "Must provide both a thread name and a message", False):
                     continue
                 [thread, *message] = content.split(" ")
                 if writeToFile(thread, username, " ".join(message).rstrip()):
@@ -234,10 +270,10 @@ def socket_handler(clientSocket: s.socket):
                 else:
                     sendMessageToClient(
                         client, f"{type} FAIL", f"Thread {thread} does not exist")
-            elif type == 'DLT':
+            elif type == 'DLT':  # Client deletes a message from a thread
                 print(f"{username} issued {type} command")
                 content = getContent(message)
-                if not checkMessageValid(2, content, client, username, "Must provide both a thread name and a message number"):
+                if not checkMessageValid(2, content, client, "Must provide both a thread name and a message number"):
                     continue
                 [thread, messageNumber] = content.split(" ")
                 result = deleteFileLine(thread, username, int(messageNumber))
@@ -246,16 +282,16 @@ def socket_handler(clientSocket: s.socket):
                 else:
                     sendMessageToClient(
                         client, f"{type} SUCCESS", f"{messageNumber} deleted from {thread} thread")
-            elif type == 'LST':
+            elif type == 'LST':  # Client lists all active threads
                 print(f"{username} issued {type} command")
                 content = getContent(message)
-                if not checkMessageValid(0, content, client, username, "No argument should be given"):
+                if not checkMessageValid(0, content, client, "No argument should be given"):
                     continue
                 sendMessageToClient(client, f"{type} SUCCESS", showThreads())
-            elif type == 'RDT':
+            elif type == 'RDT':  # Client reads content of thread
                 print(f"{username} issued {type} command")
                 content = getContent(message)
-                if not checkMessageValid(1, content, client, username, "Must provide only a thread name"):
+                if not checkMessageValid(1, content, client, "Must provide only a thread name"):
                     continue
                 result = readThread(content)
                 if result == "error":
@@ -263,6 +299,23 @@ def socket_handler(clientSocket: s.socket):
                         client, f"{type} FAIL", f"Thread {content} does not exist")
                 else:
                     sendMessageToClient(client, f"{type} SUCCESS", result)
+            elif type == 'UPD':
+                print(f"{username} issued {type} command")
+                content = getContent(message)
+                if not checkMessageValid(2, content, client, "Must provide a thread title and filename"):
+                    continue
+                [thread, file] = content.split(" ")
+                result = uploadFile(thread, file)
+                if result == "SUCCESS":
+                    sendMessageToClient(
+                        client, f"{type} SUCCESS", f"{username} successfully uploaded {file} to {thread} thread")
+                    uploadedFileMessage = f"{username} uploaded {file}"
+                    if not thread in uploadedFiles:
+                        uploadedFiles[thread] = [uploadedFileMessage]
+                    else:
+                        uploadedFiles[thread].append(uploadedFileMessage)
+                else:
+                    sendMessageToClient(client, f"{type} FAIL", result)
             elif type == 'XIT':
                 del clients[client]
                 print(f"{username} exited")
