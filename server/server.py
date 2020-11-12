@@ -185,6 +185,25 @@ def showThreads():
     return message
 
 
+# Deletes the given thread
+def deleteThread(thread: str, username: str):
+    if not thread in threads:
+        return f"Thread {thread} does not exist"
+    f = open(thread, "r")
+    owner = f.readline().rstrip()
+    f.close()
+    if owner != username:
+        return f"Permission denied"
+    os.remove(thread)
+    threads.remove(thread)
+    if thread in uploadedFiles:
+        for files in uploadedFiles[thread]:
+            file = files.split(" ")[-1]
+            os.remove(f"{thread}-{file}")
+        del uploadedFiles[thread]
+    return "SUCCESS"
+
+
 # Uploads file to thread
 def uploadFile(thread: str, file: str, path: str):
     if not thread in threads:
@@ -228,9 +247,8 @@ def socket_handler(clientSocket: s.socket):
 
         with t_lock:
             client = socketToIndex(clientSocket)
-            clientPort = clientSocket.getpeername()[1]
+            clientPort = f"{clientSocket.getpeername()[0]}:{clientSocket.getpeername()[1]}"
             username = ''
-
             if client == -1:  # New client connection
                 client = len(clients)
                 clients.append([clientSocket, "AWAIT", ""])
@@ -353,6 +371,18 @@ def socket_handler(clientSocket: s.socket):
                         client, f"{type} SUCCESS", f"{file} successfully downloaded")
                 else:
                     sendMessageToClient(client, f"{type} FAIL", result)
+            elif type == 'RMV':  # Remove thread
+                print(f"{username} issued {type} command")
+                content = getContent(message)
+                if not checkMessageValid(1, content, client, "Must provide a thread"):
+                    continue
+                [thread] = content.split(" ")
+                result = deleteThread(thread, username)
+                if result == "SUCCESS":
+                    sendMessageToClient(
+                        client, f"{type} SUCCESS", f"{username} deleted {thread} thread")
+                else:
+                    sendMessageToClient(client, f"{type} SUCCESS", result)
             elif type == 'XIT':
                 del clients[client]
                 print(f"{username} exited")
