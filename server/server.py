@@ -324,7 +324,7 @@ def socket_handler(clientSocket: s.socket):
                         client, f"{type} FAIL", f"Thread {content} does not exist")
                 else:
                     sendMessageToClient(client, f"{type} SUCCESS", result)
-            elif type == 'UPD': # Upload a file
+            elif type == 'UPD':  # Upload a file
                 print(f"{username} issued {type} command")
                 content = getContent(message)
                 if not checkMessageValid(3, content, client, "Must provide a thread and filename"):
@@ -349,7 +349,8 @@ def socket_handler(clientSocket: s.socket):
                 [thread, file, path] = content.split(" ")
                 result = downloadFile(thread, file, path)
                 if result == "SUCCESS":
-                    sendMessageToClient(client, f"{type} SUCCESS", f"{file} successfully downloaded")
+                    sendMessageToClient(
+                        client, f"{type} SUCCESS", f"{file} successfully downloaded")
                 else:
                     sendMessageToClient(client, f"{type} FAIL", result)
             elif type == 'XIT':
