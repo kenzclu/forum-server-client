@@ -16,8 +16,6 @@ mapPortToUser = {}
 threads = []
 # Stores list of downloaded files (value) at the thread (key)
 uploadedFiles = {}
-# active socketHandlers
-activeThreads = {}
 
 
 # Returns the index of the respective socket
@@ -443,7 +441,6 @@ def recv_handler():
             name=str(clientAddress), target=socket_handler, args=[clientSocket])
         socket_thread.daemon = True
         socket_thread.start()
-        activeThreads[str(clientAddress)] = socket_thread
 
 
 def send_handler():
