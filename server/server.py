@@ -12,6 +12,7 @@ UPDATE_INTERVAL = 1
 
 mapPortToUser = {}
 threads = []
+# Stores list of downloaded files (value) at the thread (key)
 uploadedFiles = {}
 
 
@@ -63,6 +64,15 @@ def checkMessageValid(numArgs: int, content: str, client: int, error: str, exact
             sendMessageToClient(client, "INVALID", error)
             return False
     return True
+
+
+# Check if file has been uploaded assuming thread has an uploaded file
+def checkFileUploaded(thread: str, file: str):
+    for message in uploadedFiles[thread]:
+        uploadedFile = message.split(" ")[-1]
+        if uploadedFile == file:
+            return True
+    return False
 
 
 # Sends clientMessage to the client, and prints the display message
@@ -186,13 +196,28 @@ def uploadFile(thread: str, file: str):
     with open(f"{thread}-{file}", 'wb+') as output, open(file, 'rb') as input:
         while True:
             data = input.read(100000)
-            print(data)
             if data == b'':  # end of file reached
                 break
             output.write(data)
         output.close()
         input.close()
-    print('end')
+    return "SUCCESS"
+
+
+# Download file from thread
+def downloadFile(thread: str, file: str):
+    if not thread in threads:
+        return f"Thread {thread} does not exist"
+    elif not thread in uploadedFiles or not checkFileUploaded(thread, file):
+        return f"{file} does not exist in Thread {thread}"
+    with open(file, 'wb+') as output, open(f"{thread}-{file}", 'rb') as input:
+        while True:
+            data = input.read(100000)
+            if data == b'':  # end of file reached
+                break
+            output.write(data)
+        output.close()
+        input.close()
     return "SUCCESS"
 
 
@@ -302,7 +327,7 @@ def socket_handler(clientSocket: s.socket):
             elif type == 'UPD':
                 print(f"{username} issued {type} command")
                 content = getContent(message)
-                if not checkMessageValid(2, content, client, "Must provide a thread title and filename"):
+                if not checkMessageValid(2, content, client, "Must provide a thread and filename"):
                     continue
                 [thread, file] = content.split(" ")
                 result = uploadFile(thread, file)
@@ -314,6 +339,17 @@ def socket_handler(clientSocket: s.socket):
                         uploadedFiles[thread] = [uploadedFileMessage]
                     else:
                         uploadedFiles[thread].append(uploadedFileMessage)
+                else:
+                    sendMessageToClient(client, f"{type} FAIL", result)
+            elif type == 'DWN':
+                print(f"{username} issued {type} command")
+                content = getContent(message)
+                if not checkMessageValid(2, content, client, "Must provide a thread and filename"):
+                    continue
+                [thread, file] = content.split(" ")
+                result = downloadFile(thread, file)
+                if result == "SUCCESS":
+                    sendMessageToClient(client, f"{type} SUCCESS", f"{file} successfully downloaded")
                 else:
                     sendMessageToClient(client, f"{type} FAIL", result)
             elif type == 'XIT':

@@ -54,7 +54,7 @@ while not loggedIn:
 
 while True:
     command = input(
-        "Enter one of the following commands: CRT, MSG, DLT, LST, RDT, UPD, XIT: ")
+        "Enter one of the following commands: CRT, MSG, DLT, LST, RDT, UPD, DWN, XIT: ")
     if command == 'XIT':
         break
     clientSocket.send(command.encode())
