@@ -22,7 +22,6 @@ USERNAME = None
 
 
 while CONNECTION_STATE != 'LOGGED_IN':
-    print(CONNECTION_STATE)
     if CONNECTION_STATE == 'DISCONNECTED':
         print("Enter username: ", end='')
     elif CONNECTION_STATE == 'IN_PROGRESS':
