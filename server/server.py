@@ -425,6 +425,7 @@ def socket_handler(clientSocket: s.socket):
 
             # notify other threads
             t_lock.notify()
+    exit(0)
 
 
 def recv_handler():
