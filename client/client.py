@@ -20,6 +20,7 @@ loggedIn = False
 CONNECTION_STATE = 'DISCONNECTED'
 USERNAME = None
 
+inputs = [clientSocket, sys.stdin]
 
 while CONNECTION_STATE != 'LOGGED_IN':
     if CONNECTION_STATE == 'DISCONNECTED':
@@ -31,7 +32,6 @@ while CONNECTION_STATE != 'LOGGED_IN':
 
     sys.stdout.flush()
 
-    inputs = [clientSocket, sys.stdin]
     readable, _, _ = select.select(inputs, [], [])
 
     for s in readable:
@@ -48,7 +48,11 @@ while CONNECTION_STATE != 'LOGGED_IN':
 
         if s == clientSocket:
             message, serverAddress = clientSocket.recvfrom(2048)
-            [status, serverMessage] = message.decode().split("\n")
+            message = message.decode()
+            if message == '':
+                print("Socket has been closed")
+                exit(0)
+            [status, serverMessage] = message.split("\n")
 
             if status == 'EXIT':
                 print("Disconnected from server")
@@ -70,7 +74,7 @@ while CONNECTION_STATE != 'LOGGED_IN':
 
 while True:
     if CONNECTION_STATE != 'SENDING':
-        print("Enter one of the following commands: CRT, MSG, DLT, LST, RDT, UPD, DWN, RMV, XIT, SHT: ", end='')
+        print("Enter one of the following commands: CRT, MSG, DLT, EDT, LST, RDT, UPD, DWN, RMV, XIT, SHT: ", end='')
     sys.stdout.flush()
     readable, _, _ = select.select(inputs, [], [])
 

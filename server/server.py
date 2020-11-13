@@ -84,7 +84,6 @@ def checkFileUploaded(thread: str, file: str):
 def sendMessageToClient(client: int, clientMessage: str, displayMessage: str):
     if clientMessage != None:
         clients[client][1] = clientMessage
-    if displayMessage != None:
         clients[client][2] = displayMessage
 
 
@@ -150,7 +149,7 @@ def deleteFileLine(name: str, username: str, messageNumber: int):
 
     user = content[messageNumber].split(" ")[1]
     if user[:-1] != username:  # Checks if user is the user that posted
-        return "Permission denied"
+        return "Message was created by another user and cannot be removed"
     f = open(name, "w")
     del content[messageNumber]
     for i in range(1, len(content)):
@@ -197,7 +196,7 @@ def deleteThread(thread: str, username: str):
     owner = f.readline().rstrip()
     f.close()
     if owner != username:
-        return f"Permission denied"
+        return "Thread was created by another user and cannot be removed"
     os.remove(thread)
     threads.remove(thread)
     if thread in uploadedFiles:
@@ -227,6 +226,29 @@ def uploadFile(thread: str, file: str, path: str):
     return "SUCCESS"
 
 
+def editFile(thread: str, messageNumber: int, message: str, username: str):
+    if not thread in threads:
+        return f"Thread {thread} does not exist"
+
+    # source: https://stackoverflow.com/questions/845058/how-to-get-line-count-of-a-large-file-cheaply-in-python
+    num_lines = sum(1 for line in open(thread, "r"))
+    if messageNumber >= num_lines or messageNumber < 1:
+        return f"Message number {messageNumber} is invalid"
+
+    with open(thread) as f:
+        content = f.readlines()  # stores lines of file as a list
+        f.close()
+
+    user = content[messageNumber].split(" ")[1]
+    if user[:-1] != username:  # Checks if user is the user that posted
+        return "Message was created by another user and cannot be changed"
+    f = open(thread, "w")
+    content[messageNumber] = f"{messageNumber} {username}: {message}\n"
+    f.write(''.join(content))
+    f.close()
+    return "SUCCESS"
+
+
 # Download file from thread
 def downloadFile(thread: str, file: str, path: str):
     if not thread in threads:
@@ -247,7 +269,7 @@ def downloadFile(thread: str, file: str, path: str):
 def shutdown():
     global SHUTDOWN
     for i in range(len(clients)):
-        sendMessageToClient(i, "EXIT", "Shutting down server\n")
+        sendMessageToClient(i, "EXIT", "Shutting down server")
     for thread in threads:  # remove all threads
         os.remove(thread)
     for _, v in uploadedFiles.items():  # remove all uploaded files
@@ -258,6 +280,7 @@ def shutdown():
 
 
 def socket_handler(clientSocket: s.socket):
+    print("Client connected")
     while True:
         message = clientSocket.recv(2048).decode()
         type = message.split(" ")[0]
@@ -276,7 +299,6 @@ def socket_handler(clientSocket: s.socket):
                 username = mapPortToUser[clientPort]
 
             if type == "AUTH_USERNAME":  # Clience inputs a username
-                sendMessageToClient(client, None, "Client connected")
                 content = getContent(message)
                 if not checkMessageValid(1, content, client, "Username must be at least one character with no whitespace"):
                     continue
@@ -345,6 +367,17 @@ def socket_handler(clientSocket: s.socket):
                 else:
                     sendMessageToClient(
                         client, f"{type} SUCCESS", f"{messageNumber} deleted from {thread} thread")
+            elif type == 'EDT':
+                print(f"{username} issued {type} command")
+                content = getContent(message)
+                if not checkMessageValid(3, content, client, "Must provide a thread, message number and new message", False):
+                    continue
+                [thread, messageNumber, *message] = content.split(" ")
+                result = editFile(thread, int(messageNumber), " ".join(message).rstrip(), username)
+                if result == 'SUCCESS':
+                    sendMessageToClient(client, f"{type} SUCCESS", f"Message number {messageNumber} in Thread {thread} edited successfully")
+                else:
+                    sendMessageToClient(client, f"{type} FAIL", result)
             elif type == 'LST':  # Client lists all active threads
                 print(f"{username} issued {type} command")
                 content = getContent(message)
@@ -457,7 +490,7 @@ def send_handler():
                     continue
                 clientSocket.send(
                     f"{clientMessage}\n{displayMessage}".encode())
-                if SHUTDOWN == 'DISABLED':
+                if SHUTDOWN == 'DISABLED' and displayMessage != None:
                     print(displayMessage.rstrip())
                 if clientMessage == "EXIT":
                     clientSocket.shutdown(s.SHUT_RDWR)
