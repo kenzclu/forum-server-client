@@ -403,13 +403,13 @@ def socket_handler(clientSocket: s.socket):
                         client, f"{type} SUCCESS", f"{username} deleted {thread} thread")
                 else:
                     sendMessageToClient(client, f"{type} SUCCESS", result)
-            elif type == 'XIT': # Client leaves
+            elif type == 'XIT':  # Client leaves
                 print(f"{username} issued {type} command")
                 sendMessageToClient(client, "EXIT", f"Goodbye {username}")
                 untrackUser(username)
                 t_lock.notify()
                 break
-            elif type == 'SHT': # Server is shutdown
+            elif type == 'SHT':  # Server is shutdown
                 print(f"{username} issued {type} command")
                 content = getContent(message)
                 if not checkMessageValid(1, content, client, "Must provide the admin password"):
