@@ -7,6 +7,7 @@ import sys
 import threading
 import time
 from datetime import datetime
+from operator import itemgetter
 
 UPDATE_INTERVAL = 1
 SHUTDOWN = 'DISABLED'
@@ -18,11 +19,19 @@ threads = []
 uploadedFiles = {}
 
 
+def createNewClient(socket: s.socket):
+    client = {}
+    client['socket'] = socket
+    client['status'] = 'AWAIT'
+    client['displayMessage'] = ''
+    return client
+
+
 # Returns the index of the respective socket
 def socketToIndex(socket: s.socket):
     global clients
     for i in range(len(clients)):
-        clientSocket = clients[i][0]
+        clientSocket = itemgetter('socket')(clients[i])
         if clientSocket.getpeername()[1] == socket.getpeername()[1]:
             return i
     return -1
@@ -83,8 +92,8 @@ def checkFileUploaded(thread: str, file: str):
 # Sends clientMessage to the client, and prints the display message
 def sendMessageToClient(client: int, clientMessage: str, displayMessage: str):
     if clientMessage != None:
-        clients[client][1] = clientMessage
-        clients[client][2] = displayMessage
+        clients[client]['status'] = clientMessage
+        clients[client]['displayMessage'] = displayMessage
 
 
 def checkUsernameExists(username: str):
@@ -294,7 +303,7 @@ def socket_handler(clientSocket: s.socket):
             username = ''
             if client == -1:  # New client connection
                 client = len(clients)
-                clients.append([clientSocket, "AWAIT", ""])
+                clients.append(createNewClient(clientSocket))
             elif clientPort in mapPortToUser:
                 username = mapPortToUser[clientPort]
 
@@ -485,7 +494,7 @@ def send_handler():
     while True:
         with t_lock:
             for i in reversed(range(len(clients))):  # iterate backwards
-                [clientSocket, clientMessage, displayMessage] = clients[i]
+                clientSocket, clientMessage, displayMessage = itemgetter('socket', 'status', 'displayMessage')(clients[i])
                 if clientMessage == "AWAIT":
                     continue
                 clientSocket.send(
