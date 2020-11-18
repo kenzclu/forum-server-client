@@ -116,7 +116,7 @@ def checkPassword(username: str, password: str):
 
 def addLogin(username: str, password: str):
     credentials = open("credentials.txt", "a")
-    credentials.write(f"\n{username} {password}")
+    credentials.write(f"{username} {password}\n")
     credentials.close()
 
 
@@ -217,21 +217,19 @@ def deleteThread(thread: str, username: str):
 
 
 # Uploads file to thread
-def uploadFile(thread: str, file: str, path: str):
+def uploadFile(clientSocket: s.socket, thread: str, file: str):
     if not thread in threads:
         return f"Thread {thread} does not exist"
-    if not os.path.isfile(f"{path}/{file}"):
-        return f"File {file} does not exist"
-    # Source: https://stackoverflow.com/questions/36875258/copying-one-files-contents-to-another-in-python
-    # Copies content of one file to another
-    with open(f"{thread}-{file}", 'wb+') as output, open(f"{path}/{file}", 'rb') as input:
-        while True:
-            data = input.read(100000)
-            if data == b'':  # end of file reached
-                break
-            output.write(data)
-        output.close()
-        input.close()
+
+    clientSocket.send('UPD OK'.encode())
+    fileData = clientSocket.recv(2048)
+    fileToWrite = open(f'{thread}-{file}', 'wb')
+    while fileData:
+        if fileData == b'UPD DONE':  # end of file reached
+            break
+        fileToWrite.write(fileData)
+        fileData = clientSocket.recv(2048)
+    fileToWrite.close()
     return "SUCCESS"
 
 
@@ -259,19 +257,20 @@ def editFile(thread: str, messageNumber: int, message: str, username: str):
 
 
 # Download file from thread
-def downloadFile(thread: str, file: str, path: str):
+def downloadFile(clientSocket: s.socket, thread: str, file: str):
     if not thread in threads:
         return f"Thread {thread} does not exist"
     elif not thread in uploadedFiles or not checkFileUploaded(thread, file):
         return f"{file} does not exist in Thread {thread}"
-    with open(f"{path}/{file}", 'wb+') as output, open(f"{thread}-{file}", 'rb') as input:
-        while True:
-            data = input.read(100000)
-            if data == b'':  # end of file reached
-                break
-            output.write(data)
-        output.close()
-        input.close()
+
+    clientSocket.send('DWN OK'.encode())
+    fileToSend = open(f"{thread}-{file}", 'rb')
+    fileData = fileToSend.read(2048)
+    while fileData:
+        clientSocket.send(fileData)
+        fileData = fileToSend.read(2048)
+    time.sleep(0.1)
+    clientSocket.send('DWN DONE'.encode())
     return "SUCCESS"
 
 
@@ -285,6 +284,7 @@ def shutdown():
         for files in v:
             file = files.split(" ")[-1]
             os.remove(f"{thread}-{file}")
+    os.remove('credentials.txt')
     SHUTDOWN = 'IN_PROGRESS'
 
 
@@ -382,9 +382,11 @@ def socket_handler(clientSocket: s.socket):
                 if not checkMessageValid(3, content, client, "Must provide a thread, message number and new message", False):
                     continue
                 [thread, messageNumber, *message] = content.split(" ")
-                result = editFile(thread, int(messageNumber), " ".join(message).rstrip(), username)
+                result = editFile(thread, int(messageNumber),
+                                  " ".join(message).rstrip(), username)
                 if result == 'SUCCESS':
-                    sendMessageToClient(client, f"{type} SUCCESS", f"Message number {messageNumber} in Thread {thread} edited successfully")
+                    sendMessageToClient(
+                        client, f"{type} SUCCESS", f"Message number {messageNumber} in Thread {thread} edited successfully")
                 else:
                     sendMessageToClient(client, f"{type} FAIL", result)
             elif type == 'LST':  # Client lists all active threads
@@ -407,10 +409,10 @@ def socket_handler(clientSocket: s.socket):
             elif type == 'UPD':  # Upload a file
                 print(f"{username} issued {type} command")
                 content = getContent(message)
-                if not checkMessageValid(3, content, client, "Must provide a thread and filename"):
+                if not checkMessageValid(2, content, client, "Must provide a thread and filename"):
                     continue
-                [thread, file, path] = content.split(" ")
-                result = uploadFile(thread, file, path)
+                [thread, file] = content.split(" ")
+                result = uploadFile(clientSocket, thread, file)
                 if result == "SUCCESS":
                     sendMessageToClient(
                         client, f"{type} SUCCESS", f"{username} successfully uploaded {file} to {thread} thread")
@@ -424,10 +426,10 @@ def socket_handler(clientSocket: s.socket):
             elif type == 'DWN':
                 print(f"{username} issued {type} command")
                 content = getContent(message)
-                if not checkMessageValid(3, content, client, "Must provide a thread and filename"):
+                if not checkMessageValid(2, content, client, "Must provide a thread and filename"):
                     continue
-                [thread, file, path] = content.split(" ")
-                result = downloadFile(thread, file, path)
+                [thread, file] = content.split(" ")
+                result = downloadFile(clientSocket, thread, file)
                 if result == "SUCCESS":
                     sendMessageToClient(
                         client, f"{type} SUCCESS", f"{file} successfully downloaded")
@@ -494,7 +496,8 @@ def send_handler():
     while True:
         with t_lock:
             for i in reversed(range(len(clients))):  # iterate backwards
-                clientSocket, clientMessage, displayMessage = itemgetter('socket', 'status', 'displayMessage')(clients[i])
+                clientSocket, clientMessage, displayMessage = itemgetter(
+                    'socket', 'status', 'displayMessage')(clients[i])
                 if clientMessage == "AWAIT":
                     continue
                 clientSocket.send(
@@ -521,6 +524,8 @@ if len(sys.argv) != 3:
 
 PORT = int(sys.argv[1])
 ADMIN_PASSWD = sys.argv[2]
+
+open('credentials.txt', 'w')
 
 # list of clients containing a list of sockets, messages to send, messages to display
 clients = []

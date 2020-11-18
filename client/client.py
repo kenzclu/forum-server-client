@@ -5,6 +5,7 @@ import os
 import select
 import socket as s
 import sys
+import time
 
 if len(sys.argv) != 3:
     sys.stderr.write("USAGE: python3 client.py <SERVER_IP> <SERVER_PORT>")
@@ -72,6 +73,8 @@ while CONNECTION_STATE != 'LOGGED_IN':
 
         sys.stdout.flush()
 
+f = None
+
 while True:
     if CONNECTION_STATE != 'SENDING':
         print("Enter one of the following commands: CRT, MSG, DLT, EDT, LST, RDT, UPD, DWN, RMV, XIT, SHT: ", end='')
@@ -79,23 +82,46 @@ while True:
     readable, _, _ = select.select(inputs, [], [])
 
     for s in readable:
-        if s == sys.stdin:
+        if s == sys.stdin and not CONNECTION_STATE == 'SENDING':
             command = sys.stdin.readline().rstrip()
             type = command.split(" ")[0]
-            if type == 'UPD' or type == 'DWN':
-                # Sends the current working directory for UPD and DWN commands
-                command = f"{command} {os.getcwd()}"
             clientSocket.send(command.encode())
+
             CONNECTION_STATE = 'SENDING'
+
+            if type == 'UPD':
+                # Sends the current working directory for UPD and DWN commands
+                f = command.split(" ")[-1]
+            elif type == 'DWN':
+                f = command.split(" ")[-1]
 
         if s == clientSocket:
             message = clientSocket.recv(2048).decode()
             [status, *serverMessage] = message.split("\n")
 
-            print("\n".join(serverMessage).rstrip())
-            if status == 'EXIT':
-                print("Disconnected from server")
-                exit(0)
-            CONNECTION_STATE = 'RECEIVED'
+            if status == 'UPD OK':
+                file = open(f, 'rb')
+                fileData = file.read(2048)
+                while fileData:
+                    clientSocket.send(fileData)
+                    fileData = file.read(2048)
+                file.close()
+                time.sleep(0.1)
+                clientSocket.send('UPD DONE'.encode())
+            elif status == 'DWN OK':
+                file = open(f, 'wb')
+                fileData = clientSocket.recv(2048)
+                while fileData:
+                    if fileData == b'DWN DONE':
+                        break
+                    file.write(fileData)
+                    fileData = clientSocket.recv(2048)
+                file.close()
+            else:
+                print("\n".join(serverMessage).rstrip())
+                if status == 'EXIT':
+                    print("Disconnected from server")
+                    exit(0)
+                CONNECTION_STATE = 'RECEIVED'
 
 clientSocket.close()
